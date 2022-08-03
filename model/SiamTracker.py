@@ -8,22 +8,17 @@ from utils.track_utils import build_track_utils
 from utils.box_ops import cat_boxlist
 from utils.bbox import BoxList
 import utils.plot_box
-import numpy as np
 import cv2
 import os, sys
 
 import time
 
-mean = np.asarray([ 0.485, 0.456, 0.406 ])
-std = np.asarray([ 0.229, 0.224, 0.225 ])
 
-
-class SiamMOT(nn.Module):
-    def __init__(self, cfg, detector):
-        super(SiamMOT, self).__init__()
+class SiamTracker(nn.Module):
+    def __init__(self, cfg):
+        super(SiamTracker, self).__init__()
 
         self.cfg = cfg
-        self.detector = detector.train()
 
         track_utils, track_pool = build_track_utils(cfg)
         self.trackhead = build_track_head(cfg, track_utils, track_pool)
@@ -38,26 +33,15 @@ class SiamMOT(nn.Module):
         self.flush_memory()
         self.roi_heads.reset_roi_status()
 
-    def forward(self, images, targets=None, given_detection=None, out_dir=None):
-        if self.training:
-            with torch.no_grad():
-                features, proposals, result, loss_detector = self.detector(images, targets)
-            # features, proposals, result, loss_detector = self.detector(images, targets)
-        else :
-            end_time = time.time()
-            features, proposals, result = self.detector(images, targets)
-            detector_time = time.time() - end_time
+    def forward(self, features, proposals, targets):
 
-        end_time = time.time()
         y, tracks, loss_track = self.trackhead(features, 
                                                proposals, 
                                                targets, 
                                                self.track_memory
                                                )
-        tracker_time = time.time() - end_time
 
         if not self.training:
-            end_time = time.time()
 
             if tracks is not None:
                 tracks_refined =self._refine_tracks(features, tracks)
@@ -70,17 +54,7 @@ class SiamMOT(nn.Module):
         if self.training:
             losses = {}
             losses.update(loss_track)
-            # losses.update(loss_detector)
             return result, losses
-
-        if out_dir is not None:
-            out_name = os.path.join(out_dir, 'track_test_{0:06d}'.format(self.idx))
-        else :
-            out_name = 'track_test_{0:06d}'.format(self.idx)
-        if tracks is not None:
-            utils.plot_box.boxes_on_image(images, detections, out_name)
-        
-        self.idx += 1
 
         return tracks
 
