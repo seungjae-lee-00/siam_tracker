@@ -105,7 +105,10 @@ def cat_boxlist(bboxes):
     assert all(bbox.mode == mode for bbox in bboxes)
 
     fields = set(bboxes[0].fields())
-    assert all(set(bbox.fields()) == fields for bbox in bboxes)
+    try:
+        assert all(set(bbox.fields()) == fields for bbox in bboxes)
+    except:
+        import pdb;pdb.set_trace()
 
     cat_boxes = BoxList(cat([bbox.bbox for bbox in bboxes], dim=0), size, mode)
 

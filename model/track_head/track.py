@@ -11,10 +11,6 @@ from model.track_head.EMM import EMM
 from model.track_sampler import make_emm_target_sampler
 import utils.plot_box
 
-mean = np.asarray([ 0.485, 0.456, 0.406 ])
-std = np.asarray([ 0.229, 0.224, 0.225 ])
-colors = [[0, 0, 255],[255, 0, 0], [127,0,127]]
-colors_targets = [[0, 255, 0],[0, 255, 255]]
 
 class TrackHead(torch.nn.Module):
     def __init__(self, tracker, tracker_sampler, track_utils, track_pool):
@@ -43,7 +39,6 @@ class TrackHead(torch.nn.Module):
 
         with torch.no_grad():
             track_proposals, sr, track_targets = self.sampler(proposals, targets)
-
         return self.tracker(features, track_proposals, sr=sr, targets=track_targets)
 
     def forward_inference(self, features, track_memory=None):

@@ -43,10 +43,11 @@ class EMM(torch.nn.Module):
             template_features = self.feature_extractor(features, boxes)
             features = self.track_utils.shuffle_feature(features)
 
-        features = self.track_utils.pad_feature(features)
-        sr_features = self.feature_extractor(features, boxes, sr)
+        padded_features = self.track_utils.pad_feature(features)
+        sr_features = self.feature_extractor(padded_features, boxes, sr)
         response_map = xcorr_depthwise(sr_features, template_features)
         cls_logits, center_logits, reg_logits = self.predictor(response_map)
+        # draw_featuremap(features, padded_features, template_features, sr_features, boxes, sr)
 
         if self.training:
             locations = get_locations(sr_features, template_features, sr, shift_xy=(shift_x, shift_y))
@@ -58,7 +59,6 @@ class EMM(torch.nn.Module):
             loss = dict(loss_tracker_class=cls_loss,
                         loss_tracker_motion=reg_loss,
                         loss_tracker_center=centerness_loss)
-
             return {}, {}, loss
 
         else:
@@ -71,6 +71,7 @@ class EMM(torch.nn.Module):
             bb, bb_conf = decode_response(cls_logits, center_logits, reg_logits, locations, boxes[0],
                                           use_centerness=self.use_centerness, sigma= self.sigma)
             track_result = wrap_results_to_boxlist(bb, bb_conf, boxes, amodal=self.amodal)
+            import pdb;pdb.set_trace()
             return {}, track_result, {}
 
     def extract_cache(self, features, detection):
@@ -95,15 +96,15 @@ class EMM(torch.nn.Module):
 
 def decode_response(cls_logits, center_logits, reg_logits, locations, boxes,
                     use_centerness=True, sigma=0.4):
-    cls_logits = F.softmax(cls_logits, dim=1)
 
+    cls_logits = F.softmax(cls_logits, dim=1)
     cls_logits = cls_logits[:, 1:2, :, :]
     if use_centerness:
         centerness = torch.sigmoid(center_logits)
         obj_confidence = cls_logits * centerness
     else:
         obj_confidence = cls_logits
-
+    obj_confidence = cls_logits
     num_track_objects = obj_confidence.shape[0]
 
     obj_confidence = obj_confidence.reshape((num_track_objects, -1))
@@ -166,7 +167,7 @@ def wrap_results_to_boxlist(bb, bb_conf, boxes: [BoxList], amodal=False):
     for _bb, _bb_conf, _boxes in zip(bb, bb_conf, boxes):
         _bb = _bb.reshape(-1, 4)
         track_box = BoxList(_bb, _boxes.size, mode="xyxy")
-        track_box.add_field("ids", _boxes.get_field('ids'))
+        # track_box.add_field("ids", _boxes.get_field('ids'))
         track_box.add_field("labels", _boxes.get_field('labels'))
         track_box.add_field("scores", _bb_conf)
         if not amodal:
@@ -218,3 +219,59 @@ def get_locations(fmap: torch.Tensor, template_fmap: torch.Tensor,
     locations[:, :, 1] -= shift_xy[1]
 
     return locations
+
+
+def draw_featuremap(features, padded_features, template_map, sr_map, boxes, sr):
+
+    f_map = features.clone().detach().cpu().numpy()
+    padded_map = padded_features.clone().detach().cpu().numpy()
+    t_map = template_map.clone().detach().cpu().numpy()
+    sr_map = sr_map.clone().detach().cpu().numpy()
+
+    f_map = np.abs(f_map[0,:,:,:]).sum(axis=0)
+    padded_map = np.abs(padded_map[0,:,:,:]).sum(axis=0)
+    t_map = t_map[0,:,:,:].sum(axis=0)
+    sr_map = sr_map[0,:,:,:].sum(axis=0)
+
+    min_val = np.min(f_map)
+    max_val = np.max(f_map)
+
+    f_f_map = np.uint8(255*(f_map - min_val)/(max_val-min_val))
+    f_pad_map = np.uint8(255*(padded_map - min_val)/(max_val-min_val))
+    f_t_map = np.uint8(255*(t_map - min_val)/(max_val-min_val))
+    f_sr_map = np.uint8(255*(sr_map - min_val)/(max_val-min_val))
+
+    heatmapshow = None
+    heatmapshow = cv2.applyColorMap(f_f_map, cv2.COLORMAP_JET)
+    heatmapshow = cv2.resize(heatmapshow, [1152, 768])
+    
+    _l, _t, _r, _b = boxes[0].bbox[0]
+    c1, c2 = (int(_l), int(_t)), (int(_r), int(_b))
+    cv2.rectangle(heatmapshow, c1, c2, [255, 255, 255], thickness=1, lineType=cv2.LINE_AA)
+
+    _l, _t, _r, _b = sr[0].bbox[0]
+    c1, c2 = (int(_l)-512, int(_t)-512), (int(_r)-512, int(_b)-512)
+    cv2.rectangle(heatmapshow, c1, c2, [0, 0, 255], thickness=1, lineType=cv2.LINE_AA)
+    # cv2.rectangle(heatmapshow, c1, c2, [0, 0, 255], thickness=1, lineType=cv2.LINE_AA)
+
+    cv2.imwrite("heatmap_f_map.jpg", heatmapshow)
+
+    heatmapshow = None
+    heatmapshow = cv2.applyColorMap(f_pad_map, cv2.COLORMAP_JET)
+    heatmapshow = cv2.resize(heatmapshow, [2176, 1792])
+    
+    _l, _t, _r, _b = sr[0].bbox[0]
+    c1, c2 = (int(_l), int(_t)), (int(_r), int(_b))
+    cv2.rectangle(heatmapshow, c1, c2, [255, 255, 255], thickness=1, lineType=cv2.LINE_AA)
+
+    cv2.imwrite("heatmap_pad_map.jpg", heatmapshow)
+
+    heatmapshow = None
+    heatmapshow = cv2.applyColorMap(f_t_map, cv2.COLORMAP_JET)
+    cv2.imwrite("heatmap_t_map.jpg", heatmapshow)
+
+    heatmapshow = None
+    heatmapshow = cv2.applyColorMap(f_sr_map, cv2.COLORMAP_JET)
+    cv2.imwrite("heatmap_sr_map.jpg", heatmapshow)
+
+    import pdb;pdb.set_trace()

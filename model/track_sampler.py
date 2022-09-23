@@ -255,7 +255,7 @@ class EMMTargetSampler(object):
         track_target = []
         for proposal, gt, pos_hn_box in zip(proposals, gts, pos_hn_boxes):
             proposal_ids = proposal.get_field('ids').cuda()
-            objectness = proposal.get_field('objectness')
+            objectness = proposal.get_field('objectness').cuda()
 
             proposal_h = proposal.bbox[:, 3] - proposal.bbox[:, 1]
             proposal_w = proposal.bbox[:, 2] - proposal.bbox[:, 0]

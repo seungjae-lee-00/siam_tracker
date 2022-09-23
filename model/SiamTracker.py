@@ -3,7 +3,7 @@ import torch.nn as nn
 import torchvision
 
 from model.track_head.track import build_track_head
-from model.solver.solver import builder_tracker_solver
+# from model.solver.solver import builder_tracker_solver
 from utils.track_utils import build_track_utils
 from utils.box_ops import cat_boxlist
 from utils.bbox import BoxList
@@ -20,9 +20,9 @@ class SiamTracker(nn.Module):
 
         self.cfg = cfg
 
-        track_utils, track_pool = build_track_utils(cfg)
-        self.trackhead = build_track_head(cfg, track_utils, track_pool)
-        self.solver = builder_tracker_solver(cfg, track_pool)
+        self.track_utils, self.track_pool = build_track_utils(cfg)
+        self.trackhead = build_track_head(cfg, self.track_utils, self.track_pool)
+        # self.solver = builder_tracker_solver(cfg, track_pool)
         self.track_memory = None
         self.idx = 0
 
@@ -33,28 +33,31 @@ class SiamTracker(nn.Module):
         self.flush_memory()
         self.roi_heads.reset_roi_status()
 
-    def forward(self, features, proposals, targets):
+    def forward(self, features, proposals, targets, track_memory=None):
+        features = [feature.unsqueeze(0) for feature in features]
+        features = torch.vstack(features)
+        features = features.cuda()
 
         y, tracks, loss_track = self.trackhead(features, 
                                                proposals, 
                                                targets, 
-                                               self.track_memory
+                                               track_memory
                                                )
 
-        if not self.training:
+        # if not self.training:
 
-            if tracks is not None:
-                tracks_refined =self._refine_tracks(features, tracks)
-                result = [cat_boxlist(result+tracks_refined)]
+        #     if tracks is not None:
+        #         tracks_refined =self._refine_tracks(features, tracks)
+        #         result = [cat_boxlist(result+tracks_refined)]
 
-            detections = self.solver(result)
-            tracks_in_memory = self.trackhead.get_track_memory(features, detections)
-            self.flush_memory(tracks_in_memory=tracks_in_memory)
+        #     # detections = self.solver(result)
+        #     tracks_in_memory = self.trackhead.get_track_memory(features, detections)
+        #     self.flush_memory(tracks_in_memory=tracks_in_memory)
 
         if self.training:
             losses = {}
             losses.update(loss_track)
-            return result, losses
+            return tracks, losses
 
         return tracks
 

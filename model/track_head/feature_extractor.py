@@ -13,24 +13,23 @@ class EMMFeatureExtractor(nn.Module):
         super(EMMFeatureExtractor, self).__init__()
 
         resolution = cfg['MODEL']['TRACK_HEAD']['POOLER_RESOLUTION']
-        scales = cfg['MODEL']['TRACK_HEAD']['POOLER_SCALES']
+        scale = cfg['MODEL']['TRACK_HEAD']['POOLER_SCALES'][0]
         sampling_ratio = cfg['MODEL']['TRACK_HEAD']['POOLER_SAMPLING_RATIO']
         r = cfg['MODEL']['TRACK_HEAD']['SEARCH_REGION']
-
+        
         pooler_z = SRPooler(
             output_size=(resolution, resolution),
-            scales=scales,
+            scale=scale,
             sampling_ratio=sampling_ratio)
         pooler_x = SRPooler(
             output_size=(int(resolution*r), int(resolution*r)),
-            scales=scales,
+            scale=scale,
             sampling_ratio=sampling_ratio)
 
         self.pooler_x = pooler_x
         self.pooler_z = pooler_z
 
     def forward(self, x, proposals, sr=None):
-        import pdb;pdb.set_trace()
         if sr is not None:
             x = self.pooler_x(x, proposals, sr)
         else:
@@ -62,6 +61,39 @@ class EMMPredictor(nn.Module):
         reg_logits = F.relu(self.reg(reg_x))
 
         return cls_logits, center_logits, reg_logits
+
+
+# class EMMPredictor(nn.Module):
+#     def __init__(self, cfg):
+#         super(EMMPredictor, self).__init__()
+
+#         if cfg['MODEL']['BACKBONE']['CONV_BODY'].startswith("DLA"):
+#             in_channels = cfg['MODEL']['DLA']['BACKBONE_OUT_CHANNELS']
+
+#         self.cls_tower_conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1, dilation=1, bias=True)
+#         nn.init.xavier_normal_(self.cls_tower_conv.weight)
+#         self.cls_tower_relu = nn.ReLU(inplace=True)
+#         self.reg_tower_conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1, dilation=1, bias=True)
+#         nn.init.xavier_normal_(self.reg_tower_conv.weight)
+#         self.reg_tower_relu = nn.ReLU(inplace=True)
+#         self.cls = nn.Conv2d(in_channels, 2, kernel_size=3, stride=1, padding=1, dilation=1, bias=True)
+#         nn.init.xavier_normal_(self.cls.weight)
+#         self.center = nn.Conv2d(in_channels, 1, kernel_size=3, stride=1, padding=1, dilation=1, bias=True)
+#         nn.init.xavier_normal_(self.center.weight)
+#         self.reg = nn.Conv2d(in_channels, 4, kernel_size=3, stride=1, padding=1, dilation=1, bias=True)
+#         self.reg_relu = nn.ReLU(inplace=True)
+
+#     def forward(self, x):
+#         cls_x = self.cls_tower_conv(x)
+#         cls_x_relu = self.cls_tower_relu(cls_x)
+#         reg_x = self.reg_tower_conv(x)
+#         reg_x_relu = self.reg_tower_relu(reg_x)
+#         cls_logits = self.cls(cls_x_relu)
+#         center_logits = self.center(cls_x_relu)
+#         reg_logits = self.reg(reg_x_relu)
+#         reg_logits = self.reg_relu(reg_logits)
+
+#         return cls_logits, center_logits, reg_logits
 
 
 def make_conv3x3(

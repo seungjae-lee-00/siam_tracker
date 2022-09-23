@@ -22,8 +22,13 @@ def select_cross_entropy_loss(pred, label):
     neg = label.data.eq(0).nonzero().squeeze().cuda()
     loss_pos = get_cls_loss(pred, label, pos)
     loss_neg = get_cls_loss(pred, label, neg)
+    # num_pos = pos.shape[0]
+    # num_neg = neg.shape[0]
+    # loss = (loss_pos*num_neg+loss_neg*num_pos)/(num_pos+num_neg)
+    # if loss_pos >10e3 or loss_neg >10e3:
+    #     import pdb;pdb.set_trace()
     return loss_pos * 0.5 + loss_neg * 0.5
-
+    # return loss
 
 def log_softmax(cls_logits):
     b, a2, h, w = cls_logits.size()
@@ -155,8 +160,7 @@ class CIOULoss(nn.Module):
 class EMMLossComputation(object):
     def __init__(self, cfg):
         self.box_reg_loss_func = CIOULoss()
-        # self.box_reg_loss_func = torch.nn.SmoothL1Loss()
-        self.centerness_loss_func = nn.BCEWithLogitsLoss()
+        self.centerness_loss_func = nn.BCEWithLogitsLoss(reduction="mean")
         self.cfg = cfg
         self.pos_ratio = cfg['MODEL']['TRACK_HEAD']['EMM']['CLS_POS_REGION']
         self.loss_weight = cfg['MODEL']['TRACK_HEAD']['EMM']['TRACK_LOSS_WEIGHT']
@@ -231,9 +235,9 @@ class EMMLossComputation(object):
 
         box_cls = log_softmax(box_cls)
         cls_loss = select_cross_entropy_loss(box_cls, cls_labels_flatten)
-           
         if in_box_inds.numel() > 0:
             centerness_targets = self.compute_centerness_targets(reg_targets_flatten)
+
             reg_loss = self.box_reg_loss_func(
                 box_regression_flatten,
                 reg_targets_flatten
@@ -248,5 +252,4 @@ class EMMLossComputation(object):
             centerness_loss = 0. * centerness_flatten.sum()
 
         return self.loss_weight*cls_loss, self.loss_weight*reg_loss, self.loss_weight*centerness_loss
-
 

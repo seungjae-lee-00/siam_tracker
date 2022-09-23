@@ -48,7 +48,7 @@ class TrackUtils(object):
             idxs = torch.tensor(idxs)
 
             return x[idxs]
-
+        
         if isinstance(f, tuple):
             shuffle_f = []
             for i, _f in enumerate(f):
@@ -100,8 +100,7 @@ class TrackUtils(object):
                 pad_f.append(x)
             pad_f = tuple(pad_f)
         else:
-            pad_f = F.pad(f, [self.pad_pixels, self.pad_pixels,
-                              self.pad_pixels, self.pad_pixels],
+            pad_f = F.pad(f, [64, 64, 64, 64],
                           mode='constant', value=0)
 
         return pad_f
